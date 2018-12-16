@@ -6,17 +6,17 @@ import gc
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns 
-import lightgbm as lgb
-from catboost import Pool, CatBoostClassifier
+#import lightgbm as lgb
+#from catboost import Pool, CatBoostClassifier
 import itertools
 import pickle, gzip
 import glob
-from sklearn.preprocessing import StandardScaler
-from tsfresh.feature_extraction import extract_features
-from sklearn.cluster import MeanShift, estimate_bandwidth
+#from sklearn.preprocessing import StandardScaler
+#from tsfresh.feature_extraction import extract_features
+#from sklearn.cluster import MeanShift, estimate_bandwidth
 import multiprocessing 
 import time
-import cesium.featurize
+#import cesium.featurize
 import scipy
 
 np.warnings.filterwarnings('ignore')
@@ -286,10 +286,14 @@ def featurize(train):
 def calculate_slope(df):
 	"""calculate the slope of flux from selected df"""
 	x, y = df['mjd'], df['flux']
-	y_normalized = (y - y.mean()) / y.std()
-	reg = scipy.stats.linregress(x, y_normalized)
-	return reg.slope
-'''
+	if len(x) > 0:
+		y_normalized = (y - y.mean()) / y.std()
+		reg = scipy.stats.linregress(x, y_normalized)
+		slope = reg.slope
+	else:
+		slope = np.nan
+	return slope
+
 train = pd.read_csv('training_set.csv', nrows=100000)
 
 groups = train.groupby(['object_id', 'passband'])
@@ -297,7 +301,8 @@ for name, group in groups:
 	print('group_name:', name)
 	group = group.reset_index()
 	detected_percent = len(group[group['detected'] == 1]) / len(group)
-	if detected_percent > 0:
+	if len(group[group['detected'] == 1]) > 1:
+
 		det_df = group[group.detected == 1]
 		first_det_idx, last_det_idx = det_df.index[0], det_df.index[-1]
 		first_before_det_idx, last_after_det_idx = first_det_idx - 1, last_det_idx + 1
@@ -308,9 +313,6 @@ for name, group in groups:
 			overall_decline_slope = calculate_slope(det_df)
 			final_decline_slope = calculate_slope(group[group.mjd > group.loc[last_det_idx].mjd - 50])
 			decline_ratio = final_decline_slope / overall_decline_slope
-			print(overall_decline_slope, final_decline_slope)
-			print('ratio:', decline_ratio)
-
 
 			if last_after_det_idx == len(group):
 				final_decline_rate = np.nan
@@ -320,16 +322,25 @@ for name, group in groups:
 					/ group.loc[last_det_idx].flux / (group.loc[last_after_det_idx].mjd - group.loc[last_det_idx].mjd)
 				else:
 					final_decline_rate = np.nan 
-			print(final_decline_rate)
 
 		#detected only increasing trend
-		if max_flux_idx == last_det_idx:
+		elif max_flux_idx == last_det_idx:
+			if first_before_det_idx == -1:
+				initial_burst_rate = np.nan
+			else:
+				initial_burst_rate = (group.loc[max_flux_idx].flux - group.loc[first_before_det_idx].flux) / group.loc[first_before_det_idx].flux \
+										/ (group.loc[max_flux_idx].mjd - group.loc[last_det_idx])
 
-			initial_burst_rate = (group.loc[max_flux_idx].flux - group.loc[first_before_det_idx].flux) / group.loc[first_before_det_idx].flux \
-									/ (group.loc[max_flux_idx].mjd - group.loc[last_det_idx])
-			overall_ burst_slope = calculate_slope(det_df)
+			overall_burst_slope = calculate_slope(det_df)
+			initial_burst_slope = calculate_slope(group[group.mjd < group.loc[first_det_idx].mjd + 50])
+
+		elif max_flux_idx > first_det_idx and max_flux_idx < last_det_idx:
+			continue
+
+
+
+
 			
-'''
 
 '''
 
